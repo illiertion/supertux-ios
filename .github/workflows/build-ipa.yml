@@ -8,33 +8,76 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build archive
+      - name: Select Xcode
         run: |
-          xcodebuild archive \
-            -project SuperTux-iOS.xcodeproj \
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
+
+      - name: Build SuperTux iOS
+        working-directory: ios port
+        run: |
+          set -e
+
+          xcodebuild build \
+            -project "SuperTux-iOS.xcodeproj" \
             -scheme "SuperTux iOS" \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath "$RUNNER_TEMP/SuperTux.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO
 
-      - name: Create unsigned IPA
+      - name: Find built application
         run: |
+          set -e
+
+          echo "Searching for SuperTux.app..."
+
+          find "$RUNNER_TEMP/DerivedData" \
+            -type d \
+            -name "*.app" \
+            -print
+
+      - name: Create IPA
+        run: |
+          set -e
+
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
+            -type d \
+            -name "supertux2.app" \
+            -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: supertux2.app was not found."
+            exit 1
+          fi
+
+          echo "Found app:"
+          echo "$APP_PATH"
+
           mkdir -p "$RUNNER_TEMP/Payload"
 
-          cp -R \
-            "$RUNNER_TEMP/SuperTux.xcarchive/Products/Applications/SuperTux iOS.app" \
-            "$RUNNER_TEMP/Payload/"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
 
           cd "$RUNNER_TEMP"
-          zip -r SuperTux-iOS-unsigned.ipa Payload
 
-      - name: Upload IPA
+          zip -r \
+            "SuperTux-iOS-unsigned.ipa" \
+            Payload
+
+          echo "IPA created:"
+          ls -lh "$RUNNER_TEMP/SuperTux-iOS-unsigned.ipa"
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: SuperTux-iOS-unsigned
           path: ${{ runner.temp }}/SuperTux-iOS-unsigned.ipa
+          if-no-files-found: error
