@@ -51,6 +51,15 @@ if [[ "${PLATFORM}" == "simulator" ]]; then
 else
   if [[ -n "${DEVELOPMENT_TEAM}" ]]; then
     XCODEBUILD_SETTINGS+=("DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}")
+  else
+    XCODEBUILD_SETTINGS+=(
+      "CODE_SIGNING_ALLOWED=NO"
+      "CODE_SIGNING_REQUIRED=NO"
+      "CODE_SIGN_IDENTITY="
+      "DEVELOPMENT_TEAM="
+      "PROVISIONING_PROFILE_SPECIFIER="
+      "AD_HOC_CODE_SIGNING_ALLOWED=NO"
+    )
   fi
   if [[ "${ALLOW_PROVISIONING_UPDATES:-YES}" != "NO" ]]; then
     XCODEBUILD_FLAGS+=("-allowProvisioningUpdates" "-allowProvisioningDeviceRegistration")
