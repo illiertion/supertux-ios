@@ -42,16 +42,13 @@ fi
 XCODEBUILD_FLAGS=("-hideShellScriptEnvironment")
 XCODEBUILD_SETTINGS=("PRODUCT_BUNDLE_IDENTIFIER=${PRODUCT_BUNDLE_IDENTIFIER}")
 
-if [[ "${PLATFORM}" == "simulator" ]]; then
-  XCODEBUILD_SETTINGS+=(
+XCODEBUILD_SETTINGS+=(
     "CODE_SIGNING_ALLOWED=NO"
     "CODE_SIGNING_REQUIRED=NO"
+    "CODE_SIGN_IDENTITY="
     "DEVELOPMENT_TEAM="
-  )
-else
-  if [[ -n "${DEVELOPMENT_TEAM}" ]]; then
-    XCODEBUILD_SETTINGS+=("DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}")
-  fi
+    "PROVISIONING_PROFILE_SPECIFIER="
+)
   if [[ "${ALLOW_PROVISIONING_UPDATES:-YES}" != "NO" ]]; then
     XCODEBUILD_FLAGS+=("-allowProvisioningUpdates" "-allowProvisioningDeviceRegistration")
   fi
