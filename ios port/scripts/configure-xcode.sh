@@ -55,7 +55,7 @@ if [[ ! -x "${VCPKG_ROOT}/vcpkg" ]]; then
   "${SCRIPT_DIR}/bootstrap-vcpkg.sh" "${TRIPLET}"
 fi
 
-VCPKG_INSTALLED_DIR="${PORT_DIR}/deps/vcpkg_installed/${TRIPLET}"
+VCPKG_INSTALLED_DIR="${PORT_DIR}/deps/vcpkg_installed"
 
 if [[ ! -d "${VCPKG_INSTALLED_DIR}/${TRIPLET}" ]]; then
   "${SCRIPT_DIR}/bootstrap-vcpkg.sh" "${TRIPLET}"
