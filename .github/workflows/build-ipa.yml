@@ -8,41 +8,40 @@ jobs:
     runs-on: macos-15
 
     steps:
-      # ----------------------------------------
-      # 1. Source
-      # ----------------------------------------
+
+      # ==========================================
+      # 1. Checkout
+      # ==========================================
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # ----------------------------------------
-      # 2. Xcode
-      # ----------------------------------------
+      # ==========================================
+      # 2. Select Xcode
+      # ==========================================
       - name: Select Xcode
         run: |
           set -e
 
           sudo xcode-select -s /Applications/Xcode_16.4.app
 
-          echo "================================"
-          echo "Xcode version"
-          echo "================================"
-
+          echo "Xcode:"
           xcodebuild -version
 
-      # ----------------------------------------
-      # 3. Find project
-      # ----------------------------------------
+      # ==========================================
+      # 3. Find Xcode project
+      # ==========================================
       - name: Find Xcode project
         id: project
         run: |
           set -e
 
-          echo "================================"
-          echo "Searching for Xcode projects"
-          echo "================================"
+          echo "Workspace:"
+          echo "$GITHUB_WORKSPACE"
 
+          echo ""
+          echo "Xcode projects:"
           find "$GITHUB_WORKSPACE" \
             -name "*.xcodeproj" \
             -print
@@ -52,16 +51,7 @@ jobs:
             -print -quit)
 
           if [ -z "$PROJECT" ]; then
-            echo "SuperTux-iOS.xcodeproj not found."
-            echo "Searching for any xcodeproj..."
-
-            PROJECT=$(find "$GITHUB_WORKSPACE" \
-              -name "*.xcodeproj" \
-              -print -quit)
-          fi
-
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: No Xcode project found."
+            echo "ERROR: SuperTux-iOS.xcodeproj not found."
             exit 1
           fi
 
@@ -71,51 +61,54 @@ jobs:
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
 
-      # ----------------------------------------
-      # 4. Show project information
-      # ----------------------------------------
-      - name: Show Xcode project
+      # ==========================================
+      # 4. Show schemes
+      # ==========================================
+      - name: Show schemes
         run: |
           set -e
 
           PROJECT="${{ steps.project.outputs.project }}"
 
-          echo "================================"
-          echo "Xcode project"
-          echo "================================"
-
+          echo "Project:"
           echo "$PROJECT"
 
           echo ""
-          echo "================================"
-          echo "Available schemes"
-          echo "================================"
+          echo "Available schemes:"
+          echo "------------------------------------------"
 
           xcodebuild \
             -project "$PROJECT" \
             -list
 
-      # ----------------------------------------
+      # ==========================================
       # 5. Build
-      # ----------------------------------------
+      # ==========================================
       - name: Build SuperTux
         id: build
         continue-on-error: true
+        shell: bash
         run: |
           set -o pipefail
 
           PROJECT="${{ steps.project.outputs.project }}"
 
-          echo "================================"
-          echo "Building SuperTux"
-          echo "================================"
+          LOG="$RUNNER_TEMP/supertux-build.log"
+
+          echo "=========================================="
+          echo "Building SuperTux iOS"
+          echo "=========================================="
 
           echo "Project:"
           echo "$PROJECT"
 
           echo ""
+          echo "Log:"
+          echo "$LOG"
 
-          xcodebuild build \
+          echo ""
+
+          xcodebuild \
             -project "$PROJECT" \
             -scheme "SuperTux iOS" \
             -configuration Release \
@@ -127,64 +120,90 @@ jobs:
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/build.log"
+            2>&1 | tee "$LOG"
 
-          BUILD_EXIT=${PIPESTATUS[0]}
+          EXIT_CODE=${PIPESTATUS[0]}
 
           echo ""
-          echo "xcodebuild exit code: $BUILD_EXIT"
+          echo "=========================================="
+          echo "xcodebuild exit code: $EXIT_CODE"
+          echo "=========================================="
 
-          exit $BUILD_EXIT
+          exit "$EXIT_CODE"
 
-      # ----------------------------------------
-      # 6. Show actual errors
-      # ----------------------------------------
-      - name: Show build errors
+      # ==========================================
+      # 6. Print actual errors
+      # ==========================================
+      - name: Show actual build errors
         if: steps.build.outcome == 'failure'
+        shell: bash
         run: |
-          echo "================================"
+          echo ""
+          echo "=========================================="
           echo "ACTUAL XCODE ERRORS"
-          echo "================================"
+          echo "=========================================="
 
-          if [ -f "$RUNNER_TEMP/build.log" ]; then
+          LOG="$RUNNER_TEMP/supertux-build.log"
 
-            grep -nE \
-              "error:|Error:|fatal error:|BUILD FAILED|ARCHIVE FAILED" \
-              "$RUNNER_TEMP/build.log" \
-              | head -200 || true
-
-          else
-            echo "build.log not found."
+          if [ ! -f "$LOG" ]; then
+            echo "Build log not found."
+            exit 0
           fi
 
-      # ----------------------------------------
-      # 7. Search for .app
-      # ----------------------------------------
+          echo ""
+          echo "---- ERROR LINES ----"
+
+          grep -nEi \
+            "error:|fatal error:|BUILD FAILED|ARCHIVE FAILED" \
+            "$LOG" \
+            | tail -200 || true
+
+          echo ""
+          echo "---- LAST 300 LINES ----"
+
+          tail -300 "$LOG" || true
+
+      # ==========================================
+      # 7. Upload build log
+      # ==========================================
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperTux-build-log
+          path: ${{ runner.temp }}/supertux-build.log
+          if-no-files-found: warn
+
+      # ==========================================
+      # 8. Find .app
+      # ==========================================
       - name: Find built app
         if: steps.build.outcome == 'success'
+        shell: bash
         run: |
           set -e
 
-          echo "================================"
+          echo "=========================================="
           echo "Searching for .app"
-          echo "================================"
+          echo "=========================================="
 
           find "$RUNNER_TEMP/DerivedData" \
             -type d \
             -name "*.app" \
             -print
 
-      # ----------------------------------------
-      # 8. Create IPA
-      # ----------------------------------------
+      # ==========================================
+      # 9. Create IPA
+      # ==========================================
       - name: Create IPA
         if: steps.build.outcome == 'success'
+        shell: bash
         run: |
           set -e
 
-          echo "================================"
-          echo "Finding SuperTux app"
-          echo "================================"
+          echo "=========================================="
+          echo "Creating IPA"
+          echo "=========================================="
 
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
             -type d \
@@ -194,7 +213,6 @@ jobs:
           if [ -z "$APP_PATH" ]; then
 
             echo "supertux2.app not found."
-
             echo "Searching for any .app..."
 
             APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
@@ -210,12 +228,12 @@ jobs:
           fi
 
           echo ""
-          echo "Selected app:"
+          echo "Using app:"
           echo "$APP_PATH"
 
-          # --------------------------------
+          # --------------------------------------
           # Create Payload
-          # --------------------------------
+          # --------------------------------------
 
           rm -rf "$RUNNER_TEMP/Payload"
 
@@ -225,9 +243,9 @@ jobs:
             "$APP_PATH" \
             "$RUNNER_TEMP/Payload/"
 
-          # --------------------------------
+          # --------------------------------------
           # Create IPA
-          # --------------------------------
+          # --------------------------------------
 
           cd "$RUNNER_TEMP"
 
@@ -238,16 +256,16 @@ jobs:
             Payload
 
           echo ""
-          echo "================================"
-          echo "IPA created"
-          echo "================================"
+          echo "=========================================="
+          echo "IPA CREATED"
+          echo "=========================================="
 
           ls -lh \
             "$RUNNER_TEMP/SuperTux-iOS-unsigned.ipa"
 
-      # ----------------------------------------
-      # 9. Upload IPA
-      # ----------------------------------------
+      # ==========================================
+      # 10. Upload IPA
+      # ==========================================
       - name: Upload IPA
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -256,23 +274,16 @@ jobs:
           path: ${{ runner.temp }}/SuperTux-iOS-unsigned.ipa
           if-no-files-found: error
 
-      # ----------------------------------------
-      # 10. Upload build log if failed
-      # ----------------------------------------
-      - name: Upload build log
-        if: steps.build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SuperTux-build-log
-          path: ${{ runner.temp }}/build.log
-          if-no-files-found: warn
-
-      # ----------------------------------------
+      # ==========================================
       # 11. Fail workflow if build failed
-      # ----------------------------------------
+      # ==========================================
       - name: Stop if build failed
         if: steps.build.outcome == 'failure'
         run: |
+          echo "=========================================="
           echo "SuperTux build failed."
-          echo "Check the 'ACTUAL XCODE ERRORS' section above."
+          echo "=========================================="
+          echo ""
+          echo "Check the ACTUAL XCODE ERRORS section."
+          echo "A complete build log was also uploaded."
           exit 1
