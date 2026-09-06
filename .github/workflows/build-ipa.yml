@@ -26,7 +26,7 @@ jobs:
 
           sudo xcode-select -s /Applications/Xcode_16.4.app
 
-          echo "Xcode:"
+          echo "Xcode version:"
           xcodebuild -version
 
       # ==========================================
@@ -37,11 +37,8 @@ jobs:
         run: |
           set -e
 
-          echo "Workspace:"
-          echo "$GITHUB_WORKSPACE"
+          echo "Searching for Xcode projects..."
 
-          echo ""
-          echo "Xcode projects:"
           find "$GITHUB_WORKSPACE" \
             -name "*.xcodeproj" \
             -print
@@ -62,20 +59,24 @@ jobs:
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
 
       # ==========================================
-      # 4. Show schemes
+      # 4. Show project
       # ==========================================
-      - name: Show schemes
+      - name: Show project information
         run: |
           set -e
 
           PROJECT="${{ steps.project.outputs.project }}"
 
-          echo "Project:"
+          echo "=========================================="
+          echo "PROJECT"
+          echo "=========================================="
+
           echo "$PROJECT"
 
           echo ""
-          echo "Available schemes:"
-          echo "------------------------------------------"
+          echo "=========================================="
+          echo "SCHEMES"
+          echo "=========================================="
 
           xcodebuild \
             -project "$PROJECT" \
@@ -92,21 +93,11 @@ jobs:
           set -o pipefail
 
           PROJECT="${{ steps.project.outputs.project }}"
-
           LOG="$RUNNER_TEMP/supertux-build.log"
 
           echo "=========================================="
-          echo "Building SuperTux iOS"
+          echo "BUILDING SUPERTUX"
           echo "=========================================="
-
-          echo "Project:"
-          echo "$PROJECT"
-
-          echo ""
-          echo "Log:"
-          echo "$LOG"
-
-          echo ""
 
           xcodebuild \
             -project "$PROJECT" \
@@ -125,33 +116,31 @@ jobs:
           EXIT_CODE=${PIPESTATUS[0]}
 
           echo ""
-          echo "=========================================="
-          echo "xcodebuild exit code: $EXIT_CODE"
-          echo "=========================================="
+          echo "Xcode exit code: $EXIT_CODE"
 
           exit "$EXIT_CODE"
 
       # ==========================================
-      # 6. Print actual errors
+      # 6. Extract REAL errors
       # ==========================================
-      - name: Show actual build errors
+      - name: Show REAL Xcode errors
         if: steps.build.outcome == 'failure'
         shell: bash
         run: |
-          echo ""
-          echo "=========================================="
-          echo "ACTUAL XCODE ERRORS"
-          echo "=========================================="
 
           LOG="$RUNNER_TEMP/supertux-build.log"
 
+          echo "=========================================="
+          echo "REAL XCODE ERRORS"
+          echo "=========================================="
+
           if [ ! -f "$LOG" ]; then
-            echo "Build log not found."
+            echo "Build log does not exist."
             exit 0
           fi
 
           echo ""
-          echo "---- ERROR LINES ----"
+          echo "========== ERROR LINES =========="
 
           grep -nEi \
             "error:|fatal error:|BUILD FAILED|ARCHIVE FAILED" \
@@ -159,12 +148,32 @@ jobs:
             | tail -200 || true
 
           echo ""
-          echo "---- LAST 300 LINES ----"
+          echo "========== LAST 150 LINES =========="
 
-          tail -300 "$LOG" || true
+          tail -150 "$LOG" || true
+
+          # ======================================
+          # Put errors into GitHub Summary
+          # ======================================
+
+          {
+            echo "# SuperTux iOS Build Error"
+            echo
+            echo "## Xcode errors"
+            echo
+            echo '```text'
+
+            grep -nEi \
+              "error:|fatal error:|BUILD FAILED|ARCHIVE FAILED" \
+              "$LOG" \
+              | tail -200 || true
+
+            echo '```'
+
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ==========================================
-      # 7. Upload build log
+      # 7. Upload complete log
       # ==========================================
       - name: Upload build log
         if: always()
@@ -175,16 +184,17 @@ jobs:
           if-no-files-found: warn
 
       # ==========================================
-      # 8. Find .app
+      # 8. Find app
       # ==========================================
       - name: Find built app
         if: steps.build.outcome == 'success'
         shell: bash
         run: |
+
           set -e
 
           echo "=========================================="
-          echo "Searching for .app"
+          echo "SEARCHING FOR APP"
           echo "=========================================="
 
           find "$RUNNER_TEMP/DerivedData" \
@@ -199,10 +209,11 @@ jobs:
         if: steps.build.outcome == 'success'
         shell: bash
         run: |
+
           set -e
 
           echo "=========================================="
-          echo "Creating IPA"
+          echo "CREATING IPA"
           echo "=========================================="
 
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
@@ -228,11 +239,11 @@ jobs:
           fi
 
           echo ""
-          echo "Using app:"
+          echo "APP:"
           echo "$APP_PATH"
 
           # --------------------------------------
-          # Create Payload
+          # Payload
           # --------------------------------------
 
           rm -rf "$RUNNER_TEMP/Payload"
@@ -244,7 +255,7 @@ jobs:
             "$RUNNER_TEMP/Payload/"
 
           # --------------------------------------
-          # Create IPA
+          # IPA
           # --------------------------------------
 
           cd "$RUNNER_TEMP"
@@ -261,7 +272,7 @@ jobs:
           echo "=========================================="
 
           ls -lh \
-            "$RUNNER_TEMP/SuperTux-iOS-unsigned.ipa"
+            SuperTux-iOS-unsigned.ipa
 
       # ==========================================
       # 10. Upload IPA
@@ -277,13 +288,9 @@ jobs:
       # ==========================================
       # 11. Fail workflow if build failed
       # ==========================================
-      - name: Stop if build failed
+      - name: Mark build as failed
         if: steps.build.outcome == 'failure'
         run: |
-          echo "=========================================="
           echo "SuperTux build failed."
-          echo "=========================================="
-          echo ""
-          echo "Check the ACTUAL XCODE ERRORS section."
-          echo "A complete build log was also uploaded."
+          echo "Open the Summary tab to see REAL Xcode errors."
           exit 1
