@@ -8,37 +8,54 @@ jobs:
     runs-on: macos-15
 
     steps:
+      # ----------------------------------------
+      # 1. Source
+      # ----------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
+      # ----------------------------------------
+      # 2. Xcode
+      # ----------------------------------------
       - name: Select Xcode
         run: |
           set -e
 
           sudo xcode-select -s /Applications/Xcode_16.4.app
 
-          echo "Xcode:"
+          echo "================================"
+          echo "Xcode version"
+          echo "================================"
+
           xcodebuild -version
 
+      # ----------------------------------------
+      # 3. Find project
+      # ----------------------------------------
       - name: Find Xcode project
-        id: find_project
+        id: project
         run: |
           set -e
 
-          echo "Current directory:"
-          pwd
+          echo "================================"
+          echo "Searching for Xcode projects"
+          echo "================================"
 
-          echo ""
-          echo "Searching for Xcode projects..."
+          find "$GITHUB_WORKSPACE" \
+            -name "*.xcodeproj" \
+            -print
 
-          find . -name "*.xcodeproj" -print
-
-          PROJECT=$(find . \
+          PROJECT=$(find "$GITHUB_WORKSPACE" \
             -name "SuperTux-iOS.xcodeproj" \
             -print -quit)
 
           if [ -z "$PROJECT" ]; then
-            PROJECT=$(find . \
+            echo "SuperTux-iOS.xcodeproj not found."
+            echo "Searching for any xcodeproj..."
+
+            PROJECT=$(find "$GITHUB_WORKSPACE" \
               -name "*.xcodeproj" \
               -print -quit)
           fi
@@ -54,30 +71,49 @@ jobs:
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
 
-      - name: Show schemes
+      # ----------------------------------------
+      # 4. Show project information
+      # ----------------------------------------
+      - name: Show Xcode project
         run: |
           set -e
 
-          PROJECT="${{ steps.find_project.outputs.project }}"
+          PROJECT="${{ steps.project.outputs.project }}"
 
-          echo "Project:"
+          echo "================================"
+          echo "Xcode project"
+          echo "================================"
+
           echo "$PROJECT"
 
           echo ""
-          echo "Available schemes:"
+          echo "================================"
+          echo "Available schemes"
+          echo "================================"
 
           xcodebuild \
             -project "$PROJECT" \
             -list
 
+      # ----------------------------------------
+      # 5. Build
+      # ----------------------------------------
       - name: Build SuperTux
+        id: build
+        continue-on-error: true
         run: |
-          set -e
+          set -o pipefail
 
-          PROJECT="${{ steps.find_project.outputs.project }}"
+          PROJECT="${{ steps.project.outputs.project }}"
 
-          echo "Building:"
+          echo "================================"
+          echo "Building SuperTux"
+          echo "================================"
+
+          echo "Project:"
           echo "$PROJECT"
+
+          echo ""
 
           xcodebuild build \
             -project "$PROJECT" \
@@ -90,22 +126,65 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=NO
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/build.log"
 
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          echo ""
+          echo "xcodebuild exit code: $BUILD_EXIT"
+
+          exit $BUILD_EXIT
+
+      # ----------------------------------------
+      # 6. Show actual errors
+      # ----------------------------------------
+      - name: Show build errors
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "================================"
+          echo "ACTUAL XCODE ERRORS"
+          echo "================================"
+
+          if [ -f "$RUNNER_TEMP/build.log" ]; then
+
+            grep -nE \
+              "error:|Error:|fatal error:|BUILD FAILED|ARCHIVE FAILED" \
+              "$RUNNER_TEMP/build.log" \
+              | head -200 || true
+
+          else
+            echo "build.log not found."
+          fi
+
+      # ----------------------------------------
+      # 7. Search for .app
+      # ----------------------------------------
       - name: Find built app
+        if: steps.build.outcome == 'success'
         run: |
           set -e
 
-          echo "Searching for applications..."
+          echo "================================"
+          echo "Searching for .app"
+          echo "================================"
 
           find "$RUNNER_TEMP/DerivedData" \
             -type d \
             -name "*.app" \
             -print
 
+      # ----------------------------------------
+      # 8. Create IPA
+      # ----------------------------------------
       - name: Create IPA
+        if: steps.build.outcome == 'success'
         run: |
           set -e
+
+          echo "================================"
+          echo "Finding SuperTux app"
+          echo "================================"
 
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
             -type d \
@@ -113,10 +192,16 @@ jobs:
             -print -quit)
 
           if [ -z "$APP_PATH" ]; then
+
+            echo "supertux2.app not found."
+
+            echo "Searching for any .app..."
+
             APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
               -type d \
               -name "*.app" \
               -print -quit)
+
           fi
 
           if [ -z "$APP_PATH" ]; then
@@ -124,29 +209,70 @@ jobs:
             exit 1
           fi
 
-          echo "Using app:"
+          echo ""
+          echo "Selected app:"
           echo "$APP_PATH"
 
+          # --------------------------------
+          # Create Payload
+          # --------------------------------
+
           rm -rf "$RUNNER_TEMP/Payload"
+
           mkdir -p "$RUNNER_TEMP/Payload"
 
-          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          cp -R \
+            "$APP_PATH" \
+            "$RUNNER_TEMP/Payload/"
+
+          # --------------------------------
+          # Create IPA
+          # --------------------------------
 
           cd "$RUNNER_TEMP"
 
           rm -f SuperTux-iOS-unsigned.ipa
 
-          zip -r \
+          zip -qry \
             SuperTux-iOS-unsigned.ipa \
             Payload
 
           echo ""
-          echo "IPA:"
-          ls -lh SuperTux-iOS-unsigned.ipa
+          echo "================================"
+          echo "IPA created"
+          echo "================================"
 
+          ls -lh \
+            "$RUNNER_TEMP/SuperTux-iOS-unsigned.ipa"
+
+      # ----------------------------------------
+      # 9. Upload IPA
+      # ----------------------------------------
       - name: Upload IPA
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: SuperTux-iOS-unsigned
           path: ${{ runner.temp }}/SuperTux-iOS-unsigned.ipa
           if-no-files-found: error
+
+      # ----------------------------------------
+      # 10. Upload build log if failed
+      # ----------------------------------------
+      - name: Upload build log
+        if: steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperTux-build-log
+          path: ${{ runner.temp }}/build.log
+          if-no-files-found: warn
+
+      # ----------------------------------------
+      # 11. Fail workflow if build failed
+      # ----------------------------------------
+      - name: Stop if build failed
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "SuperTux build failed."
+          echo "Check the 'ACTUAL XCODE ERRORS' section above."
+          exit 1
