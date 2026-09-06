@@ -49,10 +49,6 @@ XCODEBUILD_SETTINGS+=(
     "DEVELOPMENT_TEAM="
     "PROVISIONING_PROFILE_SPECIFIER="
 )
-  if [[ "${ALLOW_PROVISIONING_UPDATES:-YES}" != "NO" ]]; then
-    XCODEBUILD_FLAGS+=("-allowProvisioningUpdates" "-allowProvisioningDeviceRegistration")
-  fi
-fi
 
 xcodebuild \
   -project "${BUILD_DIR}/SUPERTUX.xcodeproj" \
