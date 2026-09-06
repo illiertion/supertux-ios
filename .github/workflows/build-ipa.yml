@@ -8,21 +8,79 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode
         run: |
+          set -e
+
           sudo xcode-select -s /Applications/Xcode_16.4.app
+
+          echo "Xcode:"
           xcodebuild -version
 
-      - name: Build SuperTux iOS
-        working-directory: ios port
+      - name: Find Xcode project
+        id: find_project
         run: |
           set -e
 
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Searching for Xcode projects..."
+
+          find . -name "*.xcodeproj" -print
+
+          PROJECT=$(find . \
+            -name "SuperTux-iOS.xcodeproj" \
+            -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            PROJECT=$(find . \
+              -name "*.xcodeproj" \
+              -print -quit)
+          fi
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: No Xcode project found."
+            exit 1
+          fi
+
+          echo ""
+          echo "Selected project:"
+          echo "$PROJECT"
+
+          echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
+
+      - name: Show schemes
+        run: |
+          set -e
+
+          PROJECT="${{ steps.find_project.outputs.project }}"
+
+          echo "Project:"
+          echo "$PROJECT"
+
+          echo ""
+          echo "Available schemes:"
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -list
+
+      - name: Build SuperTux
+        run: |
+          set -e
+
+          PROJECT="${{ steps.find_project.outputs.project }}"
+
+          echo "Building:"
+          echo "$PROJECT"
+
           xcodebuild build \
-            -project "SuperTux-iOS.xcodeproj" \
+            -project "$PROJECT" \
             -scheme "SuperTux iOS" \
             -configuration Release \
             -sdk iphoneos \
@@ -34,11 +92,11 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO
 
-      - name: Find built application
+      - name: Find built app
         run: |
           set -e
 
-          echo "Searching for SuperTux.app..."
+          echo "Searching for applications..."
 
           find "$RUNNER_TEMP/DerivedData" \
             -type d \
@@ -55,27 +113,38 @@ jobs:
             -print -quit)
 
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: supertux2.app was not found."
+            APP_PATH=$(find "$RUNNER_TEMP/DerivedData" \
+              -type d \
+              -name "*.app" \
+              -print -quit)
+          fi
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app was produced."
             exit 1
           fi
 
-          echo "Found app:"
+          echo "Using app:"
           echo "$APP_PATH"
 
+          rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
 
           cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
 
           cd "$RUNNER_TEMP"
 
+          rm -f SuperTux-iOS-unsigned.ipa
+
           zip -r \
-            "SuperTux-iOS-unsigned.ipa" \
+            SuperTux-iOS-unsigned.ipa \
             Payload
 
-          echo "IPA created:"
-          ls -lh "$RUNNER_TEMP/SuperTux-iOS-unsigned.ipa"
+          echo ""
+          echo "IPA:"
+          ls -lh SuperTux-iOS-unsigned.ipa
 
-      - name: Upload IPA artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: SuperTux-iOS-unsigned
