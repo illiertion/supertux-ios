@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VCPKG_ROOT="${PORT_DIR}/deps/vcpkg"
 TRIPLET="${1:-arm64-ios-simulator-supertux}"
-INSTALL_ROOT="${PORT_DIR}/deps/vcpkg_installed/${TRIPLET}"
+INSTALL_ROOT="${PORT_DIR}/deps/vcpkg_installed"
 
 source "${SCRIPT_DIR}/toolchain-env.sh"
 
