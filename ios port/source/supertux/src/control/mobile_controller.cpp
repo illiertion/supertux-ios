@@ -179,8 +179,8 @@ MobileController::buzz()
 void
 MobileController::draw(DrawingContext& context, bool movement_controls_enabled, bool editor_pause_only)
 {
-  if (!g_config->mobile_controls || (!g_config->touch_controls_visible && !editor_pause_only))
-    return;
+  if (!g_config->mobile_controls)
+  return;
 
   if (m_screen_width != static_cast<int>(context.get_width()) ||
       m_screen_height != static_cast<int>(context.get_height()) ||
