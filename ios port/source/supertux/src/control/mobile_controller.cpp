@@ -255,12 +255,6 @@ MobileController::update(bool movement_controls_enabled, bool editor_pause_only)
   if (!g_config->mobile_controls)
     return;
 
-  if (!g_config->touch_controls_visible && !editor_pause_only)
-  {
-    reset();
-    return;
-  }
-
   m_input_last = m_input;
   // reset
   m_input.reset();
@@ -353,9 +347,6 @@ MobileController::apply(Controller& controller) const
 bool
 MobileController::process_finger_down_event(const SDL_TouchFingerEvent& event, bool movement_controls_enabled, bool editor_pause_only)
 {
-  if (!g_config->touch_controls_visible && !editor_pause_only)
-    return false;
-
   Vector pos = finger_event_to_logical(event);
   if (!editor_pause_only && movement_controls_enabled && g_config->touch_floating_joystick && m_rect_joystick_zone.contains(pos))
   {
@@ -379,9 +370,6 @@ MobileController::process_finger_down_event(const SDL_TouchFingerEvent& event, b
 bool
 MobileController::process_finger_up_event(const SDL_TouchFingerEvent& event, bool movement_controls_enabled, bool editor_pause_only)
 {
-  if (!g_config->touch_controls_visible && !editor_pause_only)
-    return false;
-
   Vector pos = finger_event_to_logical(event);
   if (m_joystick_active && !m_mouse_joystick_active && m_joystick_finger == event.fingerId)
   {
@@ -396,9 +384,6 @@ MobileController::process_finger_up_event(const SDL_TouchFingerEvent& event, boo
 bool
 MobileController::process_finger_motion_event(const SDL_TouchFingerEvent& event, bool movement_controls_enabled, bool editor_pause_only)
 {
-  if (!g_config->touch_controls_visible && !editor_pause_only)
-    return false;
-
   Vector pos = finger_event_to_logical(event);
   if (m_joystick_active && !m_mouse_joystick_active && m_joystick_finger == event.fingerId)
   {
