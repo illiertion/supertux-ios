@@ -534,7 +534,11 @@ SDLSubsystem::SDLSubsystem()
   }
 
 #if defined(__ANDROID__) || defined(SUPERTUX_IOS)
+#ifdef SUPERTUX_IOS
+  g_config->mobile_controls = true;
+#else
   g_config->mobile_controls = SDL_GetNumTouchDevices() > 0;
+#endif
 #endif
 
   if (TTF_Init() < 0)
